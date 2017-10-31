@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'user_data.dart';
+import '../user/user_data.dart';
 
 class FitnessUserPage extends StatelessWidget {
   FitnessUserPage({this.symbol, this.users});

@@ -1,24 +1,22 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'user_data.dart';
-import 'main.dart';
 import 'dart:async';
 
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_analytics/firebase_analytics.dart'; 
 
-import 'user_list.dart';
+import '../client/client_create.dart';
+import '../client/client_pending_list.dart';
 import 'fitness_login.dart';
-import 'firebase_globals.dart' as globals;
+import '../user/user_list.dart';
+import '../user/user_data.dart';
+import '../common/firebase_globals.dart' as globals;
 
-enum FitnessHomeTab { users, something, test }
+enum FitnessHomeTab { users, clients, test }
 enum _FitnessMenuItem { logout, nothing }
 
 class FitnessHome extends StatefulWidget {
   FitnessHome(this.users);
-
   final UserData users;
-
 
   @override
   FitnessHomeState createState() => new FitnessHomeState();
@@ -26,6 +24,7 @@ class FitnessHome extends StatefulWidget {
 
 class FitnessHomeState extends State<FitnessHome> {
   final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
+  DataSnapshot _clients;
 
   void _handleFitnessMenu(BuildContext context, _FitnessMenuItem value) {
     switch (value) {
@@ -110,14 +109,55 @@ class FitnessHomeState extends State<FitnessHome> {
         .where((User user) => user != null);
   }
 
-  Widget _buildUserTab(BuildContext context, FitnessHomeTab tab, Iterable<String> userSymbols) {
-    return new AnimatedBuilder(
-      key: new ValueKey<FitnessHomeTab>(tab),
-      animation: new Listenable.merge(<Listenable>[widget.users]),
-      builder: (BuildContext context, Widget child) {
-        return _buildUserList(context, tab, _getUserList(widget.users, userSymbols));
-      },
+  // List of pending clients, people that have been added by email/name
+  // but have no yet created an account
+  // TODO(jon): Create the ability for the coach to renotify this client 
+  Widget _buildPendingList(BuildContext context, FitnessHomeTab tab, Map<String, dynamic> clients) {
+    List<Client> pendingList = new List();
+    clients.forEach((k,v) {
+      pendingList.add(new Client.fromMap(v));
+    });
+    return new PendingClientList(
+      clients: pendingList,
+      // onAction: _expandUser,
+      // onOpen: (user) {
+      //   Navigator.pushNamed(context, '/user:${user.symbol}');
+      // }
     );
+  }
+
+  Future<Null> _fetchClients() async {
+    var clients = await globals.database.child('clients').orderByChild('coach_id').equalTo(globals.currentUser.id).once();
+    // print(clients.value);
+    setState(() {
+      _clients = clients;
+    });
+  }
+
+  Widget _buildTab(BuildContext context, FitnessHomeTab tab, Iterable<String> userSymbols) {
+    switch (tab) {
+      case FitnessHomeTab.clients:
+        return new AnimatedBuilder(
+          key: new ValueKey<FitnessHomeTab>(tab),
+          animation: new Listenable.merge(<Listenable>[widget.users]),
+          builder: (BuildContext context, Widget child) {
+            return _buildPendingList(context, tab, _clients.value);
+          },
+        );
+        break;
+      case FitnessHomeTab.users:
+      case FitnessHomeTab.test:
+      default: {
+        return new AnimatedBuilder(
+          key: new ValueKey<FitnessHomeTab>(tab),
+          animation: new Listenable.merge(<Listenable>[widget.users]),
+          builder: (BuildContext context, Widget child) {
+            return _buildUserList(context, tab, _getUserList(widget.users, userSymbols));
+          },
+        );
+      }
+    }
+    
   }
 
   Widget _buildUserList(BuildContext context, FitnessHomeTab tab, Iterable<User> users) {
@@ -130,6 +170,19 @@ class FitnessHomeState extends State<FitnessHome> {
     );
   }
 
+  Widget _buildFloatingActionButton(BuildContext context) {
+    return new FloatingActionButton(
+      tooltip: 'Add user',
+      child: const Icon(Icons.add),
+      backgroundColor: Theme.of(context).accentColor,
+      onPressed: _handleCreateUser,
+    );
+  }
+
+  void _handleCreateUser() {
+    Navigator.pushNamed(context, '/addclient');
+  }
+
   void _expandUser(User user) {}
 
   static const List<String> somethingSymbols = const <String>["jon-boyd-2"];
@@ -137,20 +190,20 @@ class FitnessHomeState extends State<FitnessHome> {
 
   Future<bool> _checkLoginStatus() async {
     globals.currentUser = globals.googleSignIn.currentUser;
-    print(globals.currentUser);
-    // return currentUser == null ? false : true;
     if (globals.currentUser == null) {
       globals.currentUser = await globals.googleSignIn.signInSilently();
     }
     if (globals.currentUser == null) {
       return false;
     } else if (await globals.auth.currentUser() == null) {
+      globals.analytics.logLogin();
       GoogleSignInAuthentication credentials = await globals.googleSignIn.currentUser.authentication;
       await globals.auth.signInWithGoogle(
         idToken: credentials.idToken,
         accessToken: credentials.accessToken,
       );
     }
+    await _fetchClients();
     return true;
   }
 
@@ -163,25 +216,19 @@ class FitnessHomeState extends State<FitnessHome> {
       builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
         switch (snapshot.connectionState) {
           default: {
-            print('SNAPSHOT');
-            print(snapshot);
-            print(snapshot.connectionState);
-            print(snapshot.data);
-            // if (snapshot.hasData && !snapshot.data) {
-            //   Navigator.pushNamed(context, '/login');
-            // }
             if (snapshot.hasData && snapshot.data) {
               return new DefaultTabController(
                 length: 3,
                 child: new Scaffold(
                   key: _scaffoldKey,
                   appBar: _buildAppBar(),
+                  floatingActionButton: _buildFloatingActionButton(context),
                   drawer: _buildDrawer(context),
                   body: new TabBarView(
                     children: <Widget>[
-                      _buildUserTab(context, FitnessHomeTab.users, widget.users.allSymbols),
-                      _buildUserTab(context, FitnessHomeTab.something, somethingSymbols),
-                      _buildUserTab(context, FitnessHomeTab.test, testSymbols),
+                      _buildTab(context, FitnessHomeTab.users, widget.users.allSymbols),
+                      _buildTab(context, FitnessHomeTab.clients, null),
+                      _buildTab(context, FitnessHomeTab.test, testSymbols),
                     ],
                   )
                 )

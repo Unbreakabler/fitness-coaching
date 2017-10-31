@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 
-// import 'stock_arrow.dart';
 import 'user_data.dart';
 
 typedef void UserRowActionCallback(User user);
@@ -30,10 +29,6 @@ class UserRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // final String lastSale = "\$${stock.lastSale.toStringAsFixed(2)}";
-    // String changeInPrice = "${stock.percentChange.toStringAsFixed(2)}%";
-    // if (stock.percentChange > 0)
-    //   changeInPrice = "+" + changeInPrice;
     return new InkWell(
       onTap: _getHandler(onPressed),
       onDoubleTap: _getHandler(onDoubleTap),
@@ -47,13 +42,6 @@ class UserRow extends StatelessWidget {
         ),
         child: new Row(
           children: <Widget>[
-            // new Container(
-            //   margin: const EdgeInsets.only(right: 5.0),
-            //   child: new Hero(
-            //     tag: stock,
-            //     child: new StockArrow(percentChange: stock.percentChange)
-            //   )
-            // ),
             new Expanded(
               child: new Row(
                 children: <Widget>[
